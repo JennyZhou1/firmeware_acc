@@ -67,6 +67,8 @@ struct log_ATT_s {
 	float gz;
 };
 
+
+
 /* --- ATSP - ATTITUDE SET POINT --- */
 #define LOG_ATSP_MSG 3
 struct log_ATSP_s {
@@ -589,7 +591,6 @@ struct log_RPL6_s {
 };
 
 
-
 /* --- CAMERA TRIGGER --- */
 #define LOG_CAMT_MSG 55
 struct log_CAMT_s {
@@ -622,6 +623,15 @@ struct log_VER_s {
 struct log_PARM_s {
 	char name[16];
 	float value;
+};
+
+/*  ---log data for debug zjn---*/
+
+#define LOG_ZJN_MSG 132
+struct log_ZJN_s{
+	float accz_sp;		
+    float a_current;		
+    float a_err;
 };
 
 // the lower type of initialisation is not supported in C++
@@ -692,7 +702,11 @@ static const struct log_format_s log_formats[] = {
 	/* FMT: don't write format of format message, it's useless */
 	LOG_FORMAT(TIME, "Q", "StartTime"),
 	LOG_FORMAT(VER, "NZ", "Arch,FwGit"),
-	LOG_FORMAT(PARM, "Nf", "Name,Value")
+	LOG_FORMAT(PARM, "Nf", "Name,Value"),
+
+	//zjn
+	LOG_FORMAT(ZJN, "fff", "accz_sp,a_current,a_err")
+	//zjn
 };
 
 static const unsigned log_formats_num = sizeof(log_formats) / sizeof(log_formats[0]);

@@ -33,3 +33,9 @@ This repository contains code supporting these boards:
   * FMUv4.x (Pixhawk X and [Pixracer](http://dev.px4.io/hardware-pixracer.html))
   * AeroCore (v1 and v2)
   * STM32F4Discovery (basic support) [Tutorial](https://pixhawk.org/modules/stm32f4discovery)
+
+
+  modified by ZHOU Jinni on 2018/10/9
+
+  * Based on the ver1 with rw_uart module, the body_z acceleration --> thrust_sp loop is added on the 
+  mc_att_ control_main.cpp

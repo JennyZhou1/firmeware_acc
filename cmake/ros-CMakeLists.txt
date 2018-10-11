@@ -83,6 +83,9 @@ add_message_files(
   vehicle_force_setpoint.msg
   distance_sensor.msg
   control_state.msg
+  ##zjn
+  log_data.msg
+  ##zjn
 )
 
 ## Generate services in the 'srv' folder

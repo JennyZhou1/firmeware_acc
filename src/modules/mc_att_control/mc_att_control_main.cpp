@@ -82,6 +82,10 @@
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/multirotor_motor_limits.h>
 #include <uORB/topics/mc_att_ctrl_status.h>
+//zjn
+#include <uORB/topics/sensor_combined.h>
+#include <uORB/topics/log_data.h>
+//zjn
 #include <systemlib/param/param.h>
 #include <systemlib/err.h>
 #include <systemlib/perf_counter.h>
@@ -105,6 +109,7 @@ extern "C" __EXPORT int mc_att_control_main(int argc, char *argv[]);
 #define RATES_I_LIMIT	0.3f
 #define MANUAL_THROTTLE_MAX_MULTICOPTER	0.9f
 #define ATTITUDE_TC_DEFAULT 0.2f
+#define MM_PI 3.1415926f
 
 class MulticopterAttitudeControl
 {
@@ -146,6 +151,16 @@ private:
 	int		_vehicle_status_sub;	/**< vehicle status subscription */
 	int 	_motor_limits_sub;		/**< motor limits subscription */
 
+	//zjn
+    int     sensor_data_sub;
+	int     _flag_acc_controlstate;
+	int     _flag_acc_sensor;
+	
+
+	orb_advert_t    sensor_data_pub;
+	orb_advert_t    log_data_pub;
+	//zjn
+
 	orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
 	orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
 	orb_advert_t	_controller_status_pub;	/**< controller status publication */
@@ -165,6 +180,10 @@ private:
 	struct vehicle_status_s				_vehicle_status;	/**< vehicle status */
 	struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
 	struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
+	//zjn
+	struct sensor_combined_s            sensor_data;
+	struct log_data_s                   _log_data;
+	//zjn
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 	perf_counter_t	_controller_latency_perf;
@@ -178,6 +197,15 @@ private:
 	math::Vector<3>		_att_control;	/**< attitude control vector */
 
 	math::Matrix<3, 3>  _I;				/**< identity matrix */
+
+	//zjn
+	float a_err;
+	float a_err_prev;
+	float a_err_sum;
+	float a_current;
+	float t; //for abx loop
+	float accz_sp;
+	//zjn
 
 	struct {
 		param_t roll_p;
@@ -246,6 +274,10 @@ private:
 	 * Check for parameter update and handle it.
 	 */
 	void		parameter_update_poll();
+
+	//zjn
+    void        sensor_data_poll();
+    //zjn
 
 	/**
 	 * Check for changes in vehicle control mode.
@@ -323,6 +355,11 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_armed_sub(-1),
 	_vehicle_status_sub(-1),
 
+	//zjn
+	sensor_data_sub(-1),
+
+	//zjn
+
 	/* publications */
 	_v_rates_sp_pub(nullptr),
 	_actuators_0_pub(nullptr),
@@ -348,6 +385,11 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
 	memset(&_motor_limits, 0, sizeof(_motor_limits));
 	memset(&_controller_status, 0, sizeof(_controller_status));
+    //zjn  ??
+	memset(&sensor_data, 0, sizeof(sensor_data));
+
+	//zjn
+
 	_vehicle_status.is_rotary_wing = true;
 
 	_params.att_p.zero();
@@ -373,6 +415,19 @@ MulticopterAttitudeControl::MulticopterAttitudeControl() :
 	_rates_int.zero();
 	_thrust_sp = 0.0f;
 	_att_control.zero();
+
+	//zjn
+	_flag_acc_controlstate = 0;
+	_flag_acc_sensor = 0;
+
+
+	a_err = 0;
+	a_err_prev = 0;
+	a_err_sum = 0;
+	a_current = 0;
+	t = 0;
+	accz_sp = 0;
+	//zjn
 
 	_I.identity();
 
@@ -549,6 +604,25 @@ MulticopterAttitudeControl::parameter_update_poll()
 		parameters_update();
 	}
 }
+
+//zjn
+void
+MulticopterAttitudeControl::sensor_data_poll()
+{
+	bool updated;
+	orb_check(sensor_data_sub, &updated);
+
+	if (updated){
+		orb_copy(ORB_ID(sensor_combined), sensor_data_sub, &sensor_data);
+		_flag_acc_sensor = 1;
+
+	}
+	else
+	{
+		_flag_acc_sensor = 0;
+	}
+}
+//zjn
 
 void
 MulticopterAttitudeControl::vehicle_control_mode_poll()
@@ -765,11 +839,19 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 		_rates_int.zero();
 	}
 
+	//zjn
+	sensor_data_poll();
+
+	//zjn
+
 	/* current body angular rates */
 	math::Vector<3> rates;
 	rates(0) = _ctrl_state.roll_rate;
 	rates(1) = _ctrl_state.pitch_rate;
 	rates(2) = _ctrl_state.yaw_rate;
+	//zjn
+	float flag_aux1 = 0;
+	//zjn
 
 	/* angular rates error */
 	math::Vector<3> rates_err = _rates_sp - rates;
@@ -777,6 +859,42 @@ MulticopterAttitudeControl::control_attitude_rates(float dt)
 		       _params.rate_ff.emult(_rates_sp - _rates_sp_prev) / dt;
 	_rates_sp_prev = _rates_sp;
 	_rates_prev = rates;
+	
+
+	//zjn
+	accz_sp = -9.81 + sin(100*MM_PI*t);  //??? 
+	t = t + dt;
+	a_current = _ctrl_state.z_acc;  
+	a_err = accz_sp - a_current;
+
+	log_data_pub = orb_advertise(ORB_ID(log_data), &_log_data);
+	_log_data.accz_sp = accz_sp;
+	_log_data.a_current = a_current;
+	_log_data.a_err = a_err;
+	orb_publish(ORB_ID(log_data), log_data_pub, &_log_data);
+
+	float k_p = 0.06;
+	float k_i = 0.006;
+	float k_d = 0.03;
+	float k_hover = 0.46; //or 0.45
+
+	if(_manual_control_sp.aux1 < flag_aux1)
+	{
+		_thrust_sp = k_hover + k_p*a_err + k_i*a_err_sum + k_d*(a_err_prev - a_err);
+		if (_thrust_sp > 1)
+		{
+			_thrust_sp = 1;
+		}
+		if (_thrust_sp < 0)
+		{
+			_thrust_sp = 0;
+		}
+	}
+
+	a_err_sum = a_err_sum + a_err;
+
+
+	//zjn
 
 	// the bug is same, _motor_limits.lower_limit = 0 -> no lower_limit and upper_limit. 1 -> lower_limit. 2 -> upper_limit. 3 -> both lower and upper limit
 	/* update integral only if not saturated on low limit and if motor commands are not saturated */
@@ -816,6 +934,11 @@ MulticopterAttitudeControl::task_main()
 	_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 	_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
 	_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
+
+	//zjn
+	sensor_data_sub = orb_subscribe(ORB_ID(sensor_combined));
+
+	//zjn
 
 	/* initialize parameters cache */
 	parameters_update();
@@ -1009,6 +1132,9 @@ MulticopterAttitudeControl::print_info(){
 	warnx("flag_control_velocity_enabled: %s", _v_control_mode.flag_control_velocity_enabled ? "ture" : "false");
 	warnx("flag_control_acceleration_enabled: %s", _v_control_mode.flag_control_acceleration_enabled ? "ture" : "false");
 	warnx("flag_control_termination_enabled: %s", _v_control_mode.flag_control_termination_enabled ? "ture" : "false");
+	//zjn
+	warnx("flag_control_offboard_enabled: %s", _v_control_mode.flag_control_offboard_enabled ? "ture" : "false");
+	//zjn
 	perf_print_counter(_loop_perf);
 	perf_print_counter(_update_perf);
 }

@@ -45,6 +45,11 @@
 
 #include <drivers/drv_orb_dev.h>
 
+//zjn
+#include "topics/log_data.h"
+ORB_DEFINE(log_data, struct log_data_s);
+//zjn
+
 #include "topics/sensor_mag.h"
 ORB_DEFINE(sensor_mag, struct sensor_mag_s);
 

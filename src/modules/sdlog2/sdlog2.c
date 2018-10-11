@@ -115,6 +115,11 @@
 #include <uORB/topics/ekf2_replay.h>
 #include <uORB/topics/vehicle_land_detected.h>
 #include <uORB/topics/commander_state.h>
+// zjn
+#include <uORB/topics/log_data.h>
+// zjn
+
+
 
 #include <systemlib/systemlib.h>
 #include <systemlib/param/param.h>
@@ -1174,6 +1179,9 @@ int sdlog2_thread_main(int argc, char *argv[])
 		struct camera_trigger_s camera_trigger;
 		struct ekf2_replay_s replay;
 		struct vehicle_land_detected_s land_detected;
+		//zjn
+		struct log_data_s log_data;
+		//zjn
 	} buf;
 
 	memset(&buf, 0, sizeof(buf));
@@ -1233,6 +1241,9 @@ int sdlog2_thread_main(int argc, char *argv[])
 			struct log_RPL4_s log_RPL4;
 			struct log_RPL6_s log_RPL6;
 			struct log_LAND_s log_LAND;
+			//zjn
+			struct log_ZJN_s log_ZJN;
+			//zjn
 		} body;
 	} log_msg = {
 		LOG_PACKET_HEADER_INIT(0)
@@ -1282,6 +1293,9 @@ int sdlog2_thread_main(int argc, char *argv[])
 		int replay_sub;
 		int land_detected_sub;
 		int commander_state_sub;
+		//zjn
+		int log_data_sub;
+		//zjn
 	} subs;
 
 	subs.cmd_sub = -1;
@@ -1323,6 +1337,9 @@ int sdlog2_thread_main(int argc, char *argv[])
 	subs.replay_sub = -1;
 	subs.land_detected_sub = -1;
 	subs.commander_state_sub = -1;
+	//zjn
+	subs.log_data_sub = -1;
+	//zjn
 
 	/* add new topics HERE */
 
@@ -2182,6 +2199,17 @@ int sdlog2_thread_main(int argc, char *argv[])
 			log_msg.body.log_LAND.landed = buf.land_detected.landed;
 			LOGBUFFER_WRITE_AND_COUNT(LAND);
 		}
+
+		/* ---zjn log data--- */
+		if (copy_if_updated(ORB_ID(log_data), &subs.log_data_sub, &buf.log_data)) {
+			log_msg.msg_type = LOG_ZJN_MSG;
+			log_msg.body.log_ZJN.accz_sp = buf.log_data.accz_sp;
+			log_msg.body.log_ZJN.a_current = buf.log_data.a_current;
+			log_msg.body.log_ZJN.a_err = buf.log_data.a_err;
+			LOGBUFFER_WRITE_AND_COUNT(ZJN);
+		}
+
+		//zjn
 
 		pthread_mutex_lock(&logbuffer_mutex);
 
